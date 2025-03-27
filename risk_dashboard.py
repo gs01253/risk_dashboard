@@ -219,6 +219,7 @@ def update_scatter(data):
 
 # Run the app
 if __name__ == '__main__':
-    import webbrowser
-    webbrowser.open("http://127.0.0.1:8050/")
-    app.run(debug=True, use_reloader=False)
+    #import webbrowser
+    #webbrowser.open("http://127.0.0.1:8050/")
+    app.run(debug=False, host='0.0.0.0', port=8080)
+
