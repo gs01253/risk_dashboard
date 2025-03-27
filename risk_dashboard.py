@@ -6,7 +6,7 @@ from dash import dcc, html, dash_table, Input, Output
 import plotly.express as px
 
 # Load the dataset (make sure this path is correct!)
-df = pd.read_csv("Normalized_Force_Structure_Data.csv")
+df = pd.read_csv("Simulated_Force_Structure_Cleaned.csv")
 
 # Initialize app with LUX theme (light)
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.LUX])
@@ -26,22 +26,18 @@ def styled_slider(id_, label, value):
         )
     ])
 
-# Layout
+# App layout
 app.layout = dbc.Container([
-
-    # Title Section
     dbc.Card([
         dbc.CardBody([
             html.H1("Force Structure Risk Dashboard", className="text-center", style={
                 "color": "#003366",
                 "fontWeight": "bold",
-                "fontSize": "2.5rem",
-                "marginBottom": "0"
+                "fontSize": "2.5rem"
             })
         ])
     ], className="mb-4", style={"backgroundColor": "#f0f0f0", "border": "1px solid #ccc"}),
 
-    # Risk Weights Sliders
     dbc.Card([
         dbc.CardBody([
             html.H5("Adjust Risk Weights", className="card-title mb-3"),
@@ -53,29 +49,32 @@ app.layout = dbc.Container([
         ])
     ], className="mb-4"),
 
-    # Filter Dropdown
     html.Label("Sort and Filter:", className="fw-bold"),
     dcc.Dropdown(
         id='filter-dropdown',
         options=[
-            {'label': 'Lowest Total Risk', 'value': 'TotalRisk_asc'},
-            {'label': 'Highest Total Risk', 'value': 'TotalRisk_desc'},
-            {'label': 'Lowest Acquisition Risk', 'value': 'AcquisitionRisk_asc'},
-            {'label': 'Highest Acquisition Risk', 'value': 'AcquisitionRisk_desc'},
-            {'label': 'Lowest Probability of Success', 'value': 'ProbabilityOfSuccess_asc'},
-            {'label': 'Highest Probability of Success', 'value': 'ProbabilityOfSuccess_desc'},
-            {'label': 'Lowest Total Cost', 'value': 'TotalCost_asc'},
-            {'label': 'Highest Total Cost', 'value': 'TotalCost_desc'},
-            {'label': 'Lowest Risk-to-Cost Ratio', 'value': 'RiskToCostRatio_asc'},
-            {'label': 'Highest Risk-to-Cost Ratio', 'value': 'RiskToCostRatio_desc'},
-        ],
+    {'label': 'Lowest Total Risk', 'value': 'TotalRisk_asc'},
+    {'label': 'Highest Total Risk', 'value': 'TotalRisk_desc'},
+    {'label': 'Lowest Risk to Mission', 'value': 'RiskToMission_asc'},
+    {'label': 'Highest Risk to Mission', 'value': 'RiskToMission_desc'},
+    {'label': 'Lowest Risk to Force', 'value': 'RiskToForce_asc'},
+    {'label': 'Highest Risk to Force', 'value': 'RiskToForce_desc'},
+    {'label': 'Lowest Acquisition Risk', 'value': 'AcquisitionRisk_asc'},
+    {'label': 'Highest Acquisition Risk', 'value': 'AcquisitionRisk_desc'},
+    {'label': 'Lowest Probability of Success', 'value': 'ProbabilityOfSuccess_asc'},
+    {'label': 'Highest Probability of Success', 'value': 'ProbabilityOfSuccess_desc'},
+    {'label': 'Lowest Total Cost', 'value': 'TotalCost_asc'},
+    {'label': 'Highest Total Cost', 'value': 'TotalCost_desc'},
+    {'label': 'Lowest Risk-to-Cost Ratio', 'value': 'RiskToCostRatio_asc'},
+    {'label': 'Highest Risk-to-Cost Ratio', 'value': 'RiskToCostRatio_desc'},
+],
+
         value='TotalRisk_asc',
         className="mb-4"
     ),
 
     dcc.Store(id='weighted-data'),
 
-    # Data Table
     dash_table.DataTable(
         id='force-structure-table',
         columns=[{"name": i, "id": i} for i in [
@@ -106,18 +105,16 @@ app.layout = dbc.Container([
 
     html.Br(),
 
-    # Bar Chart & Details
     dbc.Row([
         dbc.Col(dcc.Graph(id='risk-breakdown-chart'), md=6),
         dbc.Col(html.Div(id='force-details', className='p-3 border bg-light'), md=6)
     ], className="mb-4"),
 
-    # Scatter Plot
     html.H4("Cost vs Risk vs Probability of Success", className="text-center mt-4"),
     dcc.Graph(id='scatter-plot')
 ], fluid=True)
 
-# Callback: Update weighted data
+# --- Weighted Risk Callback with Normalization ---
 @app.callback(
     Output('weighted-data', 'data'),
     Input('w-mission', 'value'),
@@ -127,23 +124,44 @@ app.layout = dbc.Container([
 )
 def update_scores(w_mission, w_force, w_acq, filter_option):
     temp_df = df.copy()
+
+    # --- Soft normalization (0.01–0.99) ---
+    def soft_normalize(series):
+        norm = (series - series.min()) / (series.max() - series.min())
+        return norm.clip(0.01, 0.99)
+
+    for col in ["RiskToMission", "RiskToForce", "AcquisitionRisk"]:
+        temp_df[col] = soft_normalize(temp_df[col])
+
+    # --- Weighted Total Risk ---
     temp_df["TotalRisk"] = (
         w_mission * temp_df["RiskToMission"] +
         w_force * temp_df["RiskToForce"] +
         w_acq * temp_df["AcquisitionRisk"]
     )
-    temp_df["ProbabilityOfSuccess"] = temp_df["TotalRisk"].apply(lambda r: round(max(0.1, min(0.95, 1 - r / 3)), 2))
+
+    # Normalize total risk and clip
+    temp_df["TotalRisk"] = soft_normalize(temp_df["TotalRisk"])
+
+    # --- Probability of Success ---
+    temp_df["ProbabilityOfSuccess"] = temp_df["TotalRisk"].apply(lambda r: round(1 - r, 2)).clip(0.01, 0.99)
+
+    # --- Risk-to-Cost Ratio (scaled up) ---
     temp_df["RiskToCostRatio"] = temp_df.apply(
-        lambda row: round(row["TotalRisk"] / row["TotalCost"], 5) if row["TotalCost"] > 0 else float("inf"),
+        lambda row: round((row["TotalRisk"] / row["TotalCost"]) * 1e6, 8) if row["TotalCost"] > 0 else float("inf"),
         axis=1
     )
+
+    # Sorting and reindexing
     col, order = filter_option.split("_")
     temp_df.sort_values(by=col, ascending=(order == "asc"), inplace=True)
     temp_df.reset_index(drop=True, inplace=True)
     temp_df["1-n"] = temp_df.index + 1
+
     return temp_df.to_dict("records")
 
-# Callback: Update table and tooltips
+
+# Table + Tooltip
 @app.callback(
     Output('force-structure-table', 'data'),
     Output('force-structure-table', 'tooltip_data'),
@@ -153,7 +171,7 @@ def update_table(data):
     tooltips = [{"InstanceID": {"value": row.get("ForcePackage", ""), "type": "markdown"}} for row in data]
     return data, tooltips
 
-# Callback: Update bar chart
+# Bar Chart
 @app.callback(
     Output('risk-breakdown-chart', 'figure'),
     Input('force-structure-table', 'selected_rows'),
@@ -172,7 +190,7 @@ def display_risk_breakdown(selected_rows, data):
     fig.update_layout(uniformtext_minsize=8, uniformtext_mode='hide', yaxis=dict(tick0=0))
     return fig
 
-# Callback: Update force details
+# Force Details
 @app.callback(
     Output('force-details', 'children'),
     Input('force-structure-table', 'selected_rows'),
@@ -193,7 +211,7 @@ def show_force_package_details(selected_rows, data):
         html.Ul([html.Li(l) for l in lines])
     ])
 
-# Callback: Scatter Plot
+# Scatter Plot
 @app.callback(
     Output('scatter-plot', 'figure'),
     Input('weighted-data', 'data')
