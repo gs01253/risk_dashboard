@@ -6,7 +6,7 @@ from dash import dcc, html, dash_table, Input, Output
 import plotly.express as px
 
 # Load the dataset (make sure this path is correct!)
-df = pd.read_csv(r"C:\Users\greyson.surges\OneDrive - LinQuest Corporation\Desktop\risk_dashboard\Normalized_Force_Structure_Data.csv")
+df = pd.read_csv("Normalized_Force_Structure_Data.csv")
 
 # Initialize app with LUX theme (light)
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.LUX])
