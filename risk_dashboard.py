@@ -10,6 +10,7 @@ df = pd.read_csv("Normalized_Force_Structure_Data.csv")
 
 # Initialize app with LUX theme (light)
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.LUX])
+server = app.server
 app.title = "Force Structure Dashboard"
 
 # Custom slider with tooltip
