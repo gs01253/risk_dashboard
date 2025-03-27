@@ -1,1 +1,1 @@
-web: gunicorn risk_dashboard:app
+web: gunicorn risk_dashboard:server
